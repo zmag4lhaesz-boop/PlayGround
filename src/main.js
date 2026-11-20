@@ -76,7 +76,6 @@ function renderMessages(campaign) {
 function showModal(title, subtitle, content) {
   document.querySelector('.modal-backdrop')?.remove();
   document.body.insertAdjacentHTML('beforeend', `<div class="modal-backdrop" data-action="dismiss-modal"><section class="modal" role="dialog" aria-modal="true"><header class="modal-head"><div><div class="eyebrow">RPG Hub</div><h2>${title}</h2><p>${subtitle}</p></div><button class="icon-btn" data-action="close-modal" aria-label="Fechar">${icon('close',18)}</button></header><div class="modal-content">${content}</div></section></div>`);
-  document.querySelector('.modal')?.addEventListener('click', (event) => event.stopPropagation());
 }
 function showDeleteConfirmation(campaignId) {
   const campaign = repo.getCampaign(campaignId);
