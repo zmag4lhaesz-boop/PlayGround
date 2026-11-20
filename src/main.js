@@ -4,7 +4,18 @@ import { avatar, escapeHtml, icon, toast } from './components.js';
 
 const repo = new LocalRepository();
 const app = document.querySelector('#app');
-const ui = { screen: 'lobby', campaignId: null, query: '', modal: '', pendingCover: '', pendingPortrait: '', fieldDraft: [...DEFAULT_FIELDS], pressTimer: null, pressedCard: null, pressOrigin: null, ignoreNextClick: false };
+const ui = { screen: 'lobby', campaignId: null, query: '', modal: '', pendingCover: '', pendingPortrait: '', fieldDraft: [...DEFAULT_FIELDS], pressTimer: null, pressedCard: null, pressOrigin: null, ignoreNextClick: false, tutorialStep: 0 };
+const tutorialSteps = [
+  { title: 'Entre na taverna', text: 'Digite seu nome de jogador para acessar o RPG Hub. Nesta versão, seu perfil e suas aventuras ficam salvos neste dispositivo.', tip: 'Você pode sair e voltar depois sem apagar suas campanhas.' },
+  { title: 'Crie uma campanha', text: 'Na tela inicial, toque em “Nova campanha” ou no botão “Criar campanha”. Dê um nome ao mundo e, se quiser, adicione uma descrição e uma imagem de capa.', tip: 'Quem cria a campanha se torna o Mestre do Jogo.' },
+  { title: 'Prepare a ficha', text: 'Na criação, escolha os campos que os personagens vão preencher. Use “Adicionar” para criar campos e toque no × para remover os que não quiser. Depois, salve a ficha do seu personagem; o retrato é opcional.', tip: 'O nome do personagem é obrigatório.' },
+  { title: 'Convide seus amigos', text: 'Abra a campanha e encontre o código de convite na lateral da mesa. Copie e compartilhe com os jogadores. Para entrar, eles devem voltar à tela inicial, tocar em “Colocar código” e informar o código.', tip: 'Esta versão salva os dados localmente: o convite só funciona para pessoas usando os mesmos dados neste dispositivo; acesso entre aparelhos precisa de um servidor.' },
+  { title: 'Converse na mesa', text: 'Escreva no campo na parte inferior do chat e toque em enviar. Enter envia a mensagem; Shift + Enter cria uma nova linha. Toque em “Minha ficha” para consultar ou editar seu personagem.', tip: 'Mensagens e rolagens aparecem no histórico da campanha.' },
+  { title: 'Role os dados', text: 'Digite comandos como /d20, /2d6 ou /2d6+3 no chat. O resultado dos dados e a soma aparecem para todos na conversa.', tip: 'Você pode rolar de 1 a 20 dados, com 2 a 1000 lados.' },
+  { title: 'Ferramentas do Mestre', text: 'Se você for o Mestre, use !gm antes da mensagem para narrar como Mestre (por exemplo: !gm Uma sombra surge na ponte). O botão de lâmpada abre sugestões privadas para ajudar a preparar a aventura.', tip: 'As sugestões não são publicadas automaticamente: revise e envie apenas se quiser.' },
+  { title: 'Encontre e organize aventuras', text: 'Use a busca na tela inicial para filtrar campanhas. Para abrir uma, toque no card. Para excluir uma campanha que você criou, mantenha o dedo pressionado sobre o card e confirme a exclusão.', tip: 'A exclusão de campanha não pode ser desfeita.' },
+  { title: 'Perfil e desconexão', text: 'Toque no seu avatar no topo para abrir o menu do perfil. “Desconectar” encerra sua sessão neste dispositivo; suas campanhas salvas continuam aqui. “Tutorial” abre novamente estas instruções.', tip: 'Pronto! Agora é só reunir o grupo e começar a aventura.' }
+];
 
 // Escapa textos antes de mostrá-los e reutiliza as mesmas funções de tela entre navegações.
 function render() {
@@ -14,7 +25,7 @@ function render() {
   return renderLobby();
 }
 function topbar() {
-  return `<header class="topbar"><button class="brand" data-action="home"><span class="brand-mark">${icon('book',20)}</span><span><span class="brand-title">RPG Hub</span><span class="brand-sub">sua mesa, sua história</span></span></button><div class="top-actions">${ui.screen === 'lobby' ? `<label class="search-wrap">${icon('search',17)}<input id="search" type="search" placeholder="Buscar aventuras..." value="${escapeHtml(ui.query)}" aria-label="Buscar RPGs"></label>` : ''}<div class="user-chip">${avatar(repo.user.name, repo.user.avatar)}<span>${escapeHtml(repo.user.name)}</span><button data-action="logout">Sair</button></div></div></header>`;
+  return `<header class="topbar"><button class="brand" data-action="home"><span class="brand-mark">${icon('book',20)}</span><span><span class="brand-title">RPG Hub</span><span class="brand-sub">sua mesa, sua história</span></span></button><div class="top-actions">${ui.screen === 'lobby' ? `<label class="search-wrap">${icon('search',17)}<input id="search" type="search" placeholder="Buscar aventuras..." value="${escapeHtml(ui.query)}" aria-label="Buscar RPGs"></label>` : ''}<div class="profile-menu-wrap"><button class="profile-trigger" data-action="profile-menu" aria-label="Abrir menu do perfil" aria-haspopup="menu" aria-expanded="false">${avatar(repo.user.name, repo.user.avatar)}<span>${escapeHtml(repo.user.name)}</span><span class="profile-caret" aria-hidden="true">⌄</span></button><div class="profile-menu" role="menu"><button type="button" role="menuitem" data-action="logout">Desconectar</button><button type="button" role="menuitem" data-action="open-tutorial">Tutorial</button></div></div></div></header>`;
 }
 function renderAuth() {
   app.innerHTML = `<main class="auth-screen"><section class="auth-card"><div class="auth-logo"><span class="brand-mark">${icon('book',22)}</span><span><span class="brand-title">RPG Hub</span><span class="brand-sub">sua mesa, sua história</span></span></div><div class="eyebrow">A aventura começa aqui</div><h1>Entre para jogar.</h1><p>Escolha um nome de jogador para criar ou encontrar sua mesa. Nesta versão, sua conta e suas aventuras ficam salvas neste dispositivo.</p><form id="auth-form"><div class="field"><label for="username">Nome de jogador</label><input id="username" name="username" maxlength="24" autocomplete="nickname" placeholder="Ex.: Lira da Lua" required /></div><button class="button" type="submit">${icon('spark',17)} Entrar na taverna</button></form><div class="auth-foot">Versão local para prototipagem. O acesso entre dispositivos será habilitado com um backend em tempo real.</div></section></main>`;
@@ -81,6 +92,14 @@ function showDeleteConfirmation(campaignId) {
   const campaign = repo.getCampaign(campaignId);
   if (!campaign || campaign.gmId !== repo.user?.id) return;
   showModal('Excluir campanha?', `Tem certeza que deseja excluir “${escapeHtml(campaign.name)}”? Esta ação não pode ser desfeita.`, `<div class="form-actions"><button class="button secondary" type="button" data-action="close-modal">Não</button><button class="button danger" type="button" data-action="confirm-delete-campaign" data-id="${campaign.id}">Sim, excluir</button></div>`);
+}
+
+function showTutorialStep(step = 0) {
+  ui.tutorialStep = Math.max(0, Math.min(step, tutorialSteps.length - 1));
+  const current = tutorialSteps[ui.tutorialStep];
+  const progress = ((ui.tutorialStep + 1) / tutorialSteps.length) * 100;
+  const controls = `<div class="tutorial-controls">${ui.tutorialStep > 0 ? `<button class="button secondary" type="button" data-action="tutorial-prev">Anterior</button>` : '<span></span>'}${ui.tutorialStep < tutorialSteps.length - 1 ? `<button class="button" type="button" data-action="tutorial-next">Próximo</button>` : `<button class="button" type="button" data-action="close-modal">Concluir</button>`}</div>`;
+  showModal('Tutorial', 'Aprenda a usar o RPG Hub passo a passo.', `<div class="tutorial-progress-label">Passo ${ui.tutorialStep + 1} de ${tutorialSteps.length}</div><div class="tutorial-progress"><span style="width:${progress}%"></span></div><article class="tutorial-card"><span class="tutorial-step-number">${String(ui.tutorialStep + 1).padStart(2, '0')}</span><h3>${escapeHtml(current.title)}</h3><p>${escapeHtml(current.text)}</p><div class="tutorial-tip"><strong>Dica</strong><span>${escapeHtml(current.tip)}</span></div></article>${controls}`);
 }
 
 function showCreateModal() {
@@ -206,10 +225,28 @@ document.addEventListener('click', async (event) => {
     event.stopPropagation();
     return;
   }
+  const profileWrap = document.querySelector('.profile-menu-wrap');
+  if (profileWrap && !profileWrap.contains(event.target)) {
+    profileWrap.classList.remove('is-open');
+    profileWrap.querySelector('.profile-trigger')?.setAttribute('aria-expanded', 'false');
+  }
   const button = event.target.closest('[data-action]');
   if (!button) return;
   const action = button.dataset.action;
   if (action === 'dismiss-modal' && event.target !== button) return;
+  if (action === 'profile-menu') {
+    const wrap = button.closest('.profile-menu-wrap');
+    const isOpen = wrap.classList.toggle('is-open');
+    button.setAttribute('aria-expanded', String(isOpen));
+  }
+  if (action === 'open-tutorial') {
+    const wrap = document.querySelector('.profile-menu-wrap');
+    wrap?.classList.remove('is-open');
+    wrap?.querySelector('.profile-trigger')?.setAttribute('aria-expanded', 'false');
+    showTutorialStep(0);
+  }
+  if (action === 'tutorial-prev') showTutorialStep(ui.tutorialStep - 1);
+  if (action === 'tutorial-next') showTutorialStep(ui.tutorialStep + 1);
   if (action === 'home' || action === 'back-lobby') { ui.screen = 'lobby'; ui.query = ''; ui.pendingPortrait = ''; render(); }
   if (action === 'logout') { repo.signOut(); ui.screen = 'lobby'; render(); }
   if (action === 'create') showCreateModal();
