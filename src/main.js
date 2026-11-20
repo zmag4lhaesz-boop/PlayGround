@@ -1,20 +1,22 @@
 import './style.css';
-import { LocalRepository, DEFAULT_FIELDS } from './storage.js';
+import { SupabaseRepository, DEFAULT_FIELDS } from './storage.js';
 import { avatar, escapeHtml, icon, toast } from './components.js';
 
-const repo = new LocalRepository();
+const repo = new SupabaseRepository();
+let initialized = false;
+const setBusy = (busy) => document.querySelectorAll('button[type="submit"], form button').forEach((button) => { button.disabled = busy; });
 const app = document.querySelector('#app');
 const ui = { screen: 'lobby', campaignId: null, query: '', modal: '', pendingCover: '', pendingPortrait: '', fieldDraft: [...DEFAULT_FIELDS], pressTimer: null, pressedCard: null, pressOrigin: null, ignoreNextClick: false, tutorialStep: 0 };
 const tutorialSteps = [
-  { title: 'Entre na taverna', text: 'Digite seu nome de jogador para acessar o RPG Hub. Nesta versão, seu perfil e suas aventuras ficam salvos neste dispositivo.', tip: 'Você pode sair e voltar depois sem apagar suas campanhas.' },
+  { title: 'Entre na taverna', text: 'Digite seu nome de jogador para acessar o RPG Hub. Seu perfil fica vinculado a este dispositivo e suas campanhas são sincronizadas na nuvem.', tip: 'Você pode sair e voltar para continuar suas aventuras.' },
   { title: 'Crie uma campanha', text: 'Na tela inicial, toque em “Nova campanha” ou no botão “Criar campanha”. Dê um nome ao mundo e, se quiser, adicione uma descrição e uma imagem de capa.', tip: 'Quem cria a campanha se torna o Mestre do Jogo.' },
   { title: 'Prepare a ficha', text: 'Na criação, escolha os campos que os personagens vão preencher. Use “Adicionar” para criar campos e toque no × para remover os que não quiser. Depois, salve a ficha do seu personagem; o retrato é opcional.', tip: 'O nome do personagem é obrigatório.' },
-  { title: 'Convide seus amigos', text: 'Abra a campanha e encontre o código de convite na lateral da mesa. Copie e compartilhe com os jogadores. Para entrar, eles devem voltar à tela inicial, tocar em “Colocar código” e informar o código.', tip: 'Esta versão salva os dados localmente: o convite só funciona para pessoas usando os mesmos dados neste dispositivo; acesso entre aparelhos precisa de um servidor.' },
+  { title: 'Convide seus amigos', text: 'Abra a campanha e encontre o código de convite na lateral da mesa. Copie e compartilhe com os jogadores. Para entrar, eles devem voltar à tela inicial, tocar em “Colocar código” e informar o código.', tip: 'O código permite que amigos entrem pela própria conta, em qualquer aparelho.' },
   { title: 'Converse na mesa', text: 'Escreva no campo na parte inferior do chat e toque em enviar. Enter envia a mensagem; Shift + Enter cria uma nova linha. Toque em “Minha ficha” para consultar ou editar seu personagem.', tip: 'Mensagens e rolagens aparecem no histórico da campanha.' },
   { title: 'Role os dados', text: 'Digite comandos como /d20, /2d6 ou /2d6+3 no chat. O resultado dos dados e a soma aparecem para todos na conversa.', tip: 'Você pode rolar de 1 a 20 dados, com 2 a 1000 lados.' },
   { title: 'Ferramentas do Mestre', text: 'Se você for o Mestre, use !gm antes da mensagem para narrar como Mestre (por exemplo: !gm Uma sombra surge na ponte). O botão de lâmpada abre sugestões privadas para ajudar a preparar a aventura.', tip: 'As sugestões não são publicadas automaticamente: revise e envie apenas se quiser.' },
   { title: 'Encontre e organize aventuras', text: 'Use a busca na tela inicial para filtrar campanhas. Para abrir uma, toque no card. Para excluir uma campanha que você criou, mantenha o dedo pressionado sobre o card e confirme a exclusão.', tip: 'A exclusão de campanha não pode ser desfeita.' },
-  { title: 'Perfil e desconexão', text: 'Toque no seu avatar no topo para abrir o menu do perfil. “Desconectar” encerra sua sessão neste dispositivo; suas campanhas salvas continuam aqui. “Tutorial” abre novamente estas instruções.', tip: 'Pronto! Agora é só reunir o grupo e começar a aventura.' }
+  { title: 'Perfil e desconexão', text: 'Toque no seu avatar no topo para abrir o menu do perfil. “Desconectar” encerra a sessão deste dispositivo. “Tutorial” abre novamente estas instruções.', tip: 'Pronto! Agora é só reunir o grupo e começar a aventura.' }
 ];
 
 // Escapa textos antes de mostrá-los e reutiliza as mesmas funções de tela entre navegações.
@@ -28,7 +30,7 @@ function topbar() {
   return `<header class="topbar"><button class="brand" data-action="home"><span class="brand-mark">${icon('book',20)}</span><span><span class="brand-title">RPG Hub</span><span class="brand-sub">sua mesa, sua história</span></span></button><div class="top-actions">${ui.screen === 'lobby' ? `<label class="search-wrap">${icon('search',17)}<input id="search" type="search" placeholder="Buscar aventuras..." value="${escapeHtml(ui.query)}" aria-label="Buscar RPGs"></label>` : ''}<div class="profile-menu-wrap"><button class="profile-trigger" data-action="profile-menu" aria-label="Abrir menu do perfil" aria-haspopup="menu" aria-expanded="false">${avatar(repo.user.name, repo.user.avatar)}<span>${escapeHtml(repo.user.name)}</span><span class="profile-caret" aria-hidden="true">⌄</span></button><div class="profile-menu" role="menu"><button type="button" role="menuitem" data-action="logout">Desconectar</button><button type="button" role="menuitem" data-action="open-tutorial">Tutorial</button></div></div></div></header>`;
 }
 function renderAuth() {
-  app.innerHTML = `<main class="auth-screen"><section class="auth-card"><div class="auth-logo"><span class="brand-mark">${icon('book',22)}</span><span><span class="brand-title">RPG Hub</span><span class="brand-sub">sua mesa, sua história</span></span></div><div class="eyebrow">A aventura começa aqui</div><h1>Entre para jogar.</h1><p>Escolha um nome de jogador para criar ou encontrar sua mesa. Nesta versão, sua conta e suas aventuras ficam salvas neste dispositivo.</p><form id="auth-form"><div class="field"><label for="username">Nome de jogador</label><input id="username" name="username" maxlength="24" autocomplete="nickname" placeholder="Ex.: Lira da Lua" required /></div><button class="button" type="submit">${icon('spark',17)} Entrar na taverna</button></form><div class="auth-foot">Versão local para prototipagem. O acesso entre dispositivos será habilitado com um backend em tempo real.</div></section></main>`;
+  app.innerHTML = `<main class="auth-screen"><section class="auth-card"><div class="auth-logo"><span class="brand-mark">${icon('book',22)}</span><span><span class="brand-title">RPG Hub</span><span class="brand-sub">sua mesa, sua história</span></span></div><div class="eyebrow">A aventura começa aqui</div><h1>Entre para jogar.</h1><p>Escolha um nome de jogador para criar, encontrar e sincronizar suas mesas na nuvem.</p><form id="auth-form"><div class="field"><label for="username">Nome de jogador</label><input id="username" name="username" maxlength="24" autocomplete="nickname" placeholder="Ex.: Lira da Lua" required /></div><button class="button" type="submit">${icon('spark',17)} Entrar na taverna</button></form><div class="auth-foot">Campanhas, fichas e mensagens são sincronizadas pelo Supabase.</div></section></main>`;
 }
 function renderLobby() {
   const filtered = repo.campaigns.filter((campaign) => `${campaign.name} ${campaign.description}`.toLowerCase().includes(ui.query.toLowerCase()));
@@ -129,7 +131,7 @@ function refreshFieldChips() {
   if (target) target.innerHTML = renderFieldChips();
 }
 function showJoinModal() {
-  showModal('Entrar em uma mesa', 'Insira o código de convite compartilhado pelo mestre.', `<form id="join-form"><div class="field"><label for="invite-code-input">Código de convite</label><input id="invite-code-input" name="code" maxlength="6" autocomplete="off" placeholder="Ex.: F8K2LP" style="text-transform:uppercase;letter-spacing:4px;font-weight:700" required /></div><div class="notice">O código dá acesso à campanha neste dispositivo. Para contas em dispositivos diferentes, será necessário ativar um backend.</div><div class="form-actions"><button class="button secondary" type="button" data-action="close-modal">Cancelar</button><button class="button" type="submit">Encontrar campanha</button></div></form>`);
+  showModal('Entrar em uma mesa', 'Insira o código de convite compartilhado pelo mestre.', `<form id="join-form"><div class="field"><label for="invite-code-input">Código de convite</label><input id="invite-code-input" name="code" maxlength="6" autocomplete="off" placeholder="Ex.: F8K2LP" style="text-transform:uppercase;letter-spacing:4px;font-weight:700" required /></div><div class="notice">O código adiciona sua conta a esta campanha e sincroniza a mesa entre os jogadores.</div><div class="form-actions"><button class="button secondary" type="button" data-action="close-modal">Cancelar</button><button class="button" type="submit">Encontrar campanha</button></div></form>`);
 }
 function showSuggestions() {
   const campaign = repo.getCampaign(ui.campaignId);
@@ -156,14 +158,14 @@ function rollDice(command) {
   const total = rolls.reduce((sum, roll) => sum + roll, 0) + modifier;
   return { text: `🎲 ${command} → [${rolls.join(', ')}]${modifier ? ` ${modifier > 0 ? '+' : ''}${modifier}` : ''} = ${total}`, type: 'dice' };
 }
-function postChat(text) {
+async function postChat(text) {
   const campaign = repo.getCampaign(ui.campaignId);
   const character = repo.getCharacter(campaign);
   let role = 'player';
   if (repo.user.id === campaign.gmId && text.startsWith('!gm ')) { role = 'gm'; text = text.slice(4).trim(); }
   const dice = rollDice(text);
   if (dice?.error) { toast(dice.error); return; }
-  repo.sendMessage(campaign.id, { name: character.name, portrait: character.portrait, text: dice?.text || text, type: dice?.type || 'text', role });
+  await repo.sendMessage(campaign.id, { name: character.name, portrait: character.portrait, text: dice?.text || text, type: dice?.type || 'text', role });
   renderChat();
 }
 
@@ -248,13 +250,13 @@ document.addEventListener('click', async (event) => {
   if (action === 'tutorial-prev') showTutorialStep(ui.tutorialStep - 1);
   if (action === 'tutorial-next') showTutorialStep(ui.tutorialStep + 1);
   if (action === 'home' || action === 'back-lobby') { ui.screen = 'lobby'; ui.query = ''; ui.pendingPortrait = ''; render(); }
-  if (action === 'logout') { repo.signOut(); ui.screen = 'lobby'; render(); }
+  if (action === 'logout') { await repo.signOut(); ui.screen = 'lobby'; render(); }
   if (action === 'create') showCreateModal();
   if (action === 'join') showJoinModal();
   if (action === 'close-modal' || action === 'dismiss-modal') document.querySelector('.modal-backdrop')?.remove();
   if (action === 'confirm-delete-campaign') {
     try {
-      repo.deleteCampaign(button.dataset.id);
+      await repo.deleteCampaign(button.dataset.id);
       document.querySelector('.modal-backdrop')?.remove();
       renderLobby();
       toast('Campanha excluída.');
@@ -292,54 +294,84 @@ document.addEventListener('click', async (event) => {
   }
 });
 
-document.addEventListener('submit', (event) => {
+document.addEventListener('submit', async (event) => {
   event.preventDefault();
   const form = event.target;
-  if (form.id === 'auth-form') {
-    const name = new FormData(form).get('username')?.trim();
-    if (name) { repo.signIn(name); ui.screen = 'lobby'; render(); }
-  }
-  if (form.id === 'create-form') {
-    const data = Object.fromEntries(new FormData(form).entries());
-    if (!data.name.trim()) return;
-    try {
-      const campaign = repo.createCampaign({ name: data.name.trim(), description: data.description.trim(), cover: ui.pendingCover, fields: [...ui.fieldDraft] });
+  setBusy(true);
+  try {
+    if (form.id === 'auth-form') {
+      const name = new FormData(form).get('username')?.trim();
+      if (!name) return;
+      await repo.signIn(name);
+      ui.screen = 'lobby';
+      render();
+    }
+    if (form.id === 'create-form') {
+      const data = Object.fromEntries(new FormData(form).entries());
+      if (!data.name.trim()) return;
+      const campaign = await repo.createCampaign({ name: data.name.trim(), description: data.description.trim(), cover: ui.pendingCover, fields: [...ui.fieldDraft] });
       document.querySelector('.modal-backdrop')?.remove();
-      ui.campaignId = campaign.id; ui.screen = 'sheet'; ui.pendingPortrait = ''; render();
+      ui.campaignId = campaign.id;
+      ui.screen = 'sheet';
+      ui.pendingPortrait = '';
+      render();
       toast(`Campanha criada! Código: ${campaign.inviteCode}`);
-    } catch (error) { toast(error.message); }
-  }
-  if (form.id === 'join-form') {
-    try {
-      const campaign = repo.joinCampaign(new FormData(form).get('code'));
+    }
+    if (form.id === 'join-form') {
+      const campaign = await repo.joinCampaign(new FormData(form).get('code'));
       document.querySelector('.modal-backdrop')?.remove();
-      ui.campaignId = campaign.id; ui.screen = repo.getCharacter(campaign) ? 'chat' : 'sheet'; render();
-    } catch (error) { toast(error.message); }
-  }
-  if (form.id === 'sheet-form') {
-    const campaign = repo.getCampaign(ui.campaignId);
-    const values = Object.fromEntries(new FormData(form).entries());
-    if (!values.Nome?.trim()) { toast('Dê um nome ao seu personagem.'); return; }
-    repo.saveCharacter(campaign.id, values, ui.pendingPortrait || undefined);
-    ui.pendingPortrait = ''; ui.screen = 'chat'; render(); toast('Personagem salvo. Bem-vindo à mesa!');
-  }
-  if (form.id === 'chat-form') {
-    const input = document.querySelector('#chat-input');
-    const text = input.value.trim();
-    if (!text) return;
-    input.value = '';
-    postChat(text);
+      ui.campaignId = campaign.id;
+      ui.screen = repo.getCharacter(campaign) ? 'chat' : 'sheet';
+      render();
+    }
+    if (form.id === 'sheet-form') {
+      const campaign = repo.getCampaign(ui.campaignId);
+      const values = Object.fromEntries(new FormData(form).entries());
+      if (!values.Nome?.trim()) { toast('Dê um nome ao seu personagem.'); return; }
+      await repo.saveCharacter(campaign.id, values, ui.pendingPortrait || undefined);
+      ui.pendingPortrait = '';
+      ui.screen = 'chat';
+      render();
+      toast('Personagem salvo. Bem-vindo à mesa!');
+    }
+    if (form.id === 'chat-form') {
+      const input = document.querySelector('#chat-input');
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = '';
+      await postChat(text);
+    }
+  } catch (error) {
+    toast(error.message || 'Não foi possível concluir a operação.');
+  } finally {
+    setBusy(false);
   }
 });
 
-// Atualiza outras abas abertas no mesmo navegador; um backend futuro substituirá esta sincronização local.
-window.addEventListener('storage', () => { repo.state = repo.load(); render(); });
-render();
+window.addEventListener('rpg:data-changed', () => render());
+
+async function initializeApp() {
+  app.innerHTML = `<main class="auth-screen"><section class="auth-card"><div class="eyebrow">RPG Hub</div><h1>Preparando a mesa...</h1><p>Conectando ao Supabase.</p></section></main>`;
+  try {
+    await repo.initialize();
+    initialized = true;
+    render();
+  } catch (error) {
+    initialized = true;
+    app.innerHTML = `<main class="auth-screen"><section class="auth-card"><div class="eyebrow">Configuração necessária</div><h1>Não foi possível conectar.</h1><p>${escapeHtml(error.message)}</p><button class="button" type="button" data-action="retry-initialize">Tentar novamente</button></section></main>`;
+  }
+}
+
+initializeApp();
+
+document.addEventListener('click', async (event) => {
+  if (event.target.closest('[data-action="retry-initialize"]')) await initializeApp();
+});
 
 async function readImage(file) {
   if (!file) return '';
   if (!file.type.startsWith('image/')) { toast('Escolha um arquivo de imagem.'); return ''; }
-  // Redimensiona imagens para manter o armazenamento local leve e evitar exceder a cota do navegador.
+  // Redimensiona imagens para manter os dados compactos ao sincronizá-los.
   const source = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(file); });
   return new Promise((resolve) => {
     const image = new Image();
