@@ -53,6 +53,38 @@ create policy "Only the GM can delete a campaign"
   on public.campaigns for delete to authenticated
   using (gm_id = auth.uid());
 
+create or replace function public.rpg_create_campaign(p_id uuid, p_invite_code text, p_data jsonb)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_campaign public.campaigns%rowtype;
+begin
+  if auth.uid() is null then
+    raise exception 'É necessário entrar para criar uma campanha.';
+  end if;
+  if not exists (select 1 from public.profiles where id = auth.uid()) then
+    raise exception 'Crie seu perfil antes de criar uma campanha.';
+  end if;
+  if p_id is null or length(trim(p_invite_code)) <> 6 then
+    raise exception 'Dados da campanha inválidos.';
+  end if;
+
+  insert into public.campaigns (id, gm_id, invite_code, members, data)
+  values (p_id, auth.uid(), upper(trim(p_invite_code)), array[auth.uid()], coalesce(p_data, '{}'::jsonb));
+
+  select * into v_campaign
+  from public.campaigns
+  where id = p_id;
+  return to_jsonb(v_campaign);
+exception
+  when unique_violation then
+    raise exception 'Código de convite já utilizado. Tente criar novamente.';
+end;
+$$;
+
 create or replace function public.rpg_join_campaign(p_code text)
 returns jsonb
 language plpgsql
@@ -201,9 +233,11 @@ begin
 end;
 $$;
 
+revoke all on function public.rpg_create_campaign(uuid, text, jsonb) from public;
 revoke all on function public.rpg_join_campaign(text) from public;
 revoke all on function public.rpg_save_character(uuid, jsonb) from public;
 revoke all on function public.rpg_send_message(uuid, jsonb) from public;
+grant execute on function public.rpg_create_campaign(uuid, text, jsonb) to authenticated;
 grant execute on function public.rpg_join_campaign(text) to authenticated;
 grant execute on function public.rpg_save_character(uuid, jsonb) to authenticated;
 grant execute on function public.rpg_send_message(uuid, jsonb) to authenticated;

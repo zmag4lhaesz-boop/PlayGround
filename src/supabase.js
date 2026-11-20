@@ -20,6 +20,7 @@ export function readableSupabaseError(error) {
   if (/Invalid API key|Invalid JWT|JWT/i.test(message)) return 'A chave pública do Supabase está incorreta. Confira VITE_SUPABASE_ANON_KEY.';
   if (/Failed to fetch|NetworkError|fetch/i.test(message)) return 'Não foi possível conectar ao Supabase. Confira sua internet e a URL do projeto.';
   if (/relation .* does not exist|schema cache/i.test(message)) return 'As tabelas do RPG Hub ainda não foram criadas. Execute supabase/schema.sql no SQL Editor do projeto.';
+  if (/row-level security policy/i.test(message)) return 'Permissão negada pelo Supabase. Execute novamente supabase/schema.sql atualizado no SQL Editor e confirme o login anônimo.';
   if (/function .* does not exist|Could not find the function/i.test(message)) return 'As funções do RPG Hub ainda não foram configuradas. Execute supabase/schema.sql no SQL Editor do projeto.';
   if (/Anonymous sign-ins are disabled|anonymous sign-ins/i.test(message)) return 'Ative o acesso anônimo em Supabase → Authentication → Sign In / Providers → Anonymous.';
   return message || 'Não foi possível concluir a operação. Tente novamente.';

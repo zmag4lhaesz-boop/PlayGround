@@ -133,9 +133,11 @@ export class SupabaseRepository {
     };
     for (let attempt = 0; attempt < 4; attempt += 1) {
       const inviteCode = this.uniqueCode();
-      const { data: row, error } = await supabase.from('campaigns').insert({
-        id, gm_id: this.user.id, invite_code: inviteCode, members: [this.user.id], data, created_at: createdAt
-      }).select('id,gm_id,invite_code,members,data,created_at').single();
+      const { data: row, error } = await supabase.rpc('rpg_create_campaign', {
+        p_id: id,
+        p_invite_code: inviteCode,
+        p_data: { ...data, createdAt }
+      });
       if (!error) {
         const campaign = this.mapCampaign(row);
         this.state.campaigns.unshift(campaign);
