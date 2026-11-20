@@ -4,7 +4,7 @@ import { avatar, escapeHtml, icon, toast } from './components.js';
 
 const repo = new LocalRepository();
 const app = document.querySelector('#app');
-const ui = { screen: 'lobby', campaignId: null, query: '', modal: '', pendingCover: '', pendingPortrait: '', fieldDraft: [...DEFAULT_FIELDS] };
+const ui = { screen: 'lobby', campaignId: null, query: '', modal: '', pendingCover: '', pendingPortrait: '', fieldDraft: [...DEFAULT_FIELDS], pressTimer: null, pressedCard: null, suppressCardClickUntil: 0 };
 
 // Escapa textos antes de mostrá-los e reutiliza as mesmas funções de tela entre navegações.
 function render() {
@@ -28,7 +28,7 @@ function renderLobby() {
 function campaignCard(campaign) {
   const isGM = repo.user.id === campaign.gmId;
   const members = campaign.members.map((id) => repo.state.users.find((user) => user.id === id)).filter(Boolean).slice(0, 4);
-  return `<article class="campaign-card" data-action="open-campaign" data-id="${campaign.id}"><div class="campaign-cover">${campaign.cover ? `<img src="${campaign.cover}" alt="Capa de ${escapeHtml(campaign.name)}"/>` : `<div class="cover-art"><span class="cover-symbol">✦</span><span class="cover-label">Crônicas · ${escapeHtml(campaign.name)}</span></div>`}<span class="role-pill">${isGM ? '✧ MESTRE' : '✦ JOGADOR'}</span></div><div class="card-body"><div class="card-title-row"><h3>${escapeHtml(campaign.name)}</h3><span class="card-count">${campaign.members.length} ${campaign.members.length === 1 ? 'membro' : 'membros'}</span></div><p>${escapeHtml(campaign.description || 'Uma aventura aguarda seus heróis.')}</p><div class="card-footer"><div class="avatars">${members.map((user) => avatar(user.name, user.avatar)).join('')}</div><span>Mestre: ${escapeHtml(campaign.gmName)}</span></div></div></article>`;
+  return `<article class="campaign-card${isGM ? ' long-pressable' : ''}" data-action="open-campaign" data-id="${campaign.id}"${isGM ? ' aria-label="Segure para excluir esta campanha"' : ''}><div class="campaign-cover">${campaign.cover ? `<img src="${campaign.cover}" alt="Capa de ${escapeHtml(campaign.name)}"/>` : `<div class="cover-art"><span class="cover-symbol">✦</span><span class="cover-label">Crônicas · ${escapeHtml(campaign.name)}</span></div>`}<span class="role-pill">${isGM ? '✧ MESTRE' : '✦ JOGADOR'}</span></div><div class="card-body"><div class="card-title-row"><h3>${escapeHtml(campaign.name)}</h3><span class="card-count">${campaign.members.length} ${campaign.members.length === 1 ? 'membro' : 'membros'}</span></div><p>${escapeHtml(campaign.description || 'Uma aventura aguarda seus heróis.')}</p><div class="card-footer"><div class="avatars">${members.map((user) => avatar(user.name, user.avatar)).join('')}</div><span>Mestre: ${escapeHtml(campaign.gmName)}</span></div></div></article>`;
 }
 function renderSheet() {
   const campaign = repo.getCampaign(ui.campaignId);
@@ -78,6 +78,12 @@ function showModal(title, subtitle, content) {
   document.body.insertAdjacentHTML('beforeend', `<div class="modal-backdrop" data-action="dismiss-modal"><section class="modal" role="dialog" aria-modal="true"><header class="modal-head"><div><div class="eyebrow">RPG Hub</div><h2>${title}</h2><p>${subtitle}</p></div><button class="icon-btn" data-action="close-modal" aria-label="Fechar">${icon('close',18)}</button></header><div class="modal-content">${content}</div></section></div>`);
   document.querySelector('.modal')?.addEventListener('click', (event) => event.stopPropagation());
 }
+function showDeleteConfirmation(campaignId) {
+  const campaign = repo.getCampaign(campaignId);
+  if (!campaign || campaign.gmId !== repo.user?.id) return;
+  showModal('Excluir campanha?', `Tem certeza que deseja excluir “${escapeHtml(campaign.name)}”? Esta ação não pode ser desfeita.`, `<div class="form-actions"><button class="button secondary" type="button" data-action="close-modal">Não</button><button class="button danger" type="button" data-action="confirm-delete-campaign" data-id="${campaign.id}">Sim, excluir</button></div>`);
+}
+
 function showCreateModal() {
   ui.pendingCover = '';
   ui.fieldDraft = [...DEFAULT_FIELDS];
@@ -143,7 +149,43 @@ function postChat(text) {
   renderChat();
 }
 
+function cancelCampaignPress() {
+  if (ui.pressTimer) window.clearTimeout(ui.pressTimer);
+  ui.pressTimer = null;
+  ui.pressedCard = null;
+  ui.pressOrigin = null;
+}
+
+document.addEventListener('pointerdown', (event) => {
+  const card = event.target.closest('.campaign-card.long-pressable');
+  if (!card || (event.pointerType === 'mouse' && event.button !== 0)) return;
+  cancelCampaignPress();
+  ui.pressedCard = card;
+  ui.pressOrigin = { x: event.clientX, y: event.clientY };
+  ui.pressTimer = window.setTimeout(() => {
+    if (!card.isConnected) return cancelCampaignPress();
+    const campaign = repo.getCampaign(card.dataset.id);
+    if (!campaign || campaign.gmId !== repo.user?.id) return cancelCampaignPress();
+    ui.pressTimer = null;
+    ui.suppressCardClickUntil = Date.now() + 1200;
+    showDeleteConfirmation(campaign.id);
+  }, 650);
+}, { passive: true });
+document.addEventListener('pointermove', (event) => {
+  if (!ui.pressTimer || !ui.pressOrigin) return;
+  if (Math.hypot(event.clientX - ui.pressOrigin.x, event.clientY - ui.pressOrigin.y) > 12) cancelCampaignPress();
+}, { passive: true });
+for (const eventName of ['pointerup', 'pointercancel']) document.addEventListener(eventName, cancelCampaignPress, { passive: true });
+document.addEventListener('contextmenu', (event) => {
+  if (event.target.closest('.campaign-card.long-pressable')) event.preventDefault();
+});
+
 document.addEventListener('click', async (event) => {
+  if (Date.now() < ui.suppressCardClickUntil && event.target.closest('.campaign-card')) {
+    event.preventDefault();
+    event.stopPropagation();
+    return;
+  }
   const button = event.target.closest('[data-action]');
   if (!button) return;
   const action = button.dataset.action;
@@ -153,6 +195,14 @@ document.addEventListener('click', async (event) => {
   if (action === 'create') showCreateModal();
   if (action === 'join') showJoinModal();
   if (action === 'close-modal' || action === 'dismiss-modal') document.querySelector('.modal-backdrop')?.remove();
+  if (action === 'confirm-delete-campaign') {
+    try {
+      repo.deleteCampaign(button.dataset.id);
+      document.querySelector('.modal-backdrop')?.remove();
+      renderLobby();
+      toast('Campanha excluída.');
+    } catch (error) { toast(error.message); }
+  }
   if (action === 'add-field') {
     const input = document.querySelector('#new-field');
     const name = input?.value.trim();

@@ -26,6 +26,14 @@ export class LocalRepository {
   getCampaign(id) { return this.state.campaigns.find((item) => item.id === id); }
   getCharacter(campaign, userId = this.state.currentUserId) { return campaign.characters.find((item) => item.userId === userId); }
 
+  deleteCampaign(campaignId) {
+    const campaign = this.getCampaign(campaignId);
+    if (!campaign) throw new Error('Esta campanha não existe mais.');
+    if (!this.user || campaign.gmId !== this.user.id) throw new Error('Somente o Mestre pode excluir esta campanha.');
+    this.state.campaigns = this.state.campaigns.filter((item) => item.id !== campaignId);
+    this.save();
+  }
+
   signIn(name) {
     let user = this.state.users.find((item) => item.name.toLowerCase() === name.trim().toLowerCase());
     if (!user) {
