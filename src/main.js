@@ -10,7 +10,7 @@ const ui = { screen: 'lobby', campaignId: null, query: '', modal: '', pendingCov
 const tutorialSteps = [
   { title: 'Entre na taverna', text: 'Digite seu nome de jogador para acessar o RPG Hub. Seu perfil fica vinculado a este dispositivo e suas campanhas são sincronizadas na nuvem.', tip: 'Você pode sair e voltar para continuar suas aventuras.' },
   { title: 'Crie uma campanha', text: 'Na tela inicial, toque em “Nova campanha” ou no botão “Criar campanha”. Dê um nome ao mundo e, se quiser, adicione uma descrição e uma imagem de capa.', tip: 'Quem cria a campanha se torna o Mestre do Jogo.' },
-  { title: 'Prepare a ficha', text: 'Na criação, escolha os campos que os personagens vão preencher. Use “Adicionar” para criar campos e toque no × para remover os que não quiser. Depois, salve a ficha do seu personagem; o retrato é opcional.', tip: 'O nome do personagem é obrigatório.' },
+  { title: 'Prepare as fichas', text: 'Ao criar a campanha, escolha os campos que os personagens dos jogadores vão preencher. Use “Adicionar” para criar campos e toque no × para remover os que não quiser. O Mestre não precisa criar uma ficha para narrar.', tip: 'Somente os jogadores criam fichas de personagem.' },
   { title: 'Convide seus amigos', text: 'Abra a campanha e encontre o código de convite na lateral da mesa. Copie e compartilhe com os jogadores. Para entrar, eles devem voltar à tela inicial, tocar em “Colocar código” e informar o código.', tip: 'O código permite que amigos entrem pela própria conta, em qualquer aparelho.' },
   { title: 'Converse na mesa', text: 'Escreva no campo na parte inferior do chat e toque em enviar. Enter envia a mensagem; Shift + Enter cria uma nova linha. Toque em “Minha ficha” para consultar ou editar seu personagem.', tip: 'Mensagens e rolagens aparecem no histórico da campanha.' },
   { title: 'Role os dados', text: 'Digite comandos como /d20, /2d6 ou /2d6+3 no chat. O resultado dos dados e a soma aparecem para todos na conversa.', tip: 'Você pode rolar de 1 a 20 dados, com 2 a 1000 lados.' },
@@ -60,9 +60,10 @@ function renderChat() {
   const campaign = repo.getCampaign(ui.campaignId);
   if (!campaign) { ui.screen = 'lobby'; return render(); }
   const character = repo.getCharacter(campaign);
-  if (!character) { ui.screen = 'sheet'; return render(); }
   const isGM = repo.user.id === campaign.gmId;
-  app.innerHTML = `<main class="app-shell">${topbar()}<section class="page-heading"><button class="back-link" data-action="back-lobby">${icon('back',16)} Voltar às aventuras</button><div class="eyebrow">Mesa virtual · ${campaign.members.length} jogadores</div><h1>${escapeHtml(campaign.name)}</h1><p>Uma história compartilhada, uma rolagem de cada vez.</p></section><section class="chat-layout"><div class="chat-panel"><div class="chat-top"><div class="chat-campaign"><span class="brand-mark">${icon('dice',17)}</span><div><strong>${escapeHtml(campaign.name)}</strong><small><span class="live-dot"></span> Mesa ativa · Mestre ${escapeHtml(campaign.gmName)}</small></div></div><div class="chat-actions">${isGM ? '' : `<button class="icon-btn dice-button" data-action="roll-dice" aria-label="Rolar dado d20" title="Rolar dado d20">${icon('dice',21)}</button>`}<button class="ghost-btn small invite-inline" data-action="character">${icon('user',15)} Minha ficha</button><button class="icon-btn" data-action="members" aria-label="Mostrar membros">${icon('user',17)}</button></div></div><div class="chat-scroll" id="chat-scroll">${renderMessages(campaign)}</div><form class="composer" id="chat-form"><p class="command-hint">Use <b>/d20</b> ou <b>/2d6+3</b> para rolar dados · ${isGM ? '<b>!gm</b> para narrar como mestre' : 'ações entre *asteriscos* aparecem em itálico'}</p><div class="composer-row"><textarea id="chat-input" rows="1" placeholder="Escreva sua mensagem..." maxlength="1200" aria-label="Mensagem"></textarea><button class="button send-btn" type="submit" aria-label="Enviar">${icon('send',17)}</button></div></form></div><aside class="side-stack"><section class="sidebar-panel"><h3>Jogadores na mesa</h3>${campaign.members.map((id) => memberRow(campaign, id)).join('')}</section><section class="sidebar-panel"><h3>Código de convite</h3><div class="invite-code"><span>${campaign.inviteCode}</span><button data-action="copy" aria-label="Copiar código">${icon('copy',16)}</button></div><p class="invite-caption">Compartilhe este código com seus amigos para que entrem nesta campanha.</p></section></aside></section>${isGM ? `<button class="gm-tools" data-action="suggestions" aria-label="Sugestões privadas do mestre"><span class="icon-btn">${icon('bulb',19)}</span></button>` : ''}</main>`;
+  if (!isGM && !character) { ui.screen = 'sheet'; return render(); }
+  const gmTools = isGM ? `<div class="gm-chat-tools"><button type="button" data-action="gm-narrate">Narrar</button><button type="button" data-action="gm-npc">Criar NPC</button><button type="button" data-action="gm-event">Criar evento</button></div>` : '';
+  app.innerHTML = `<main class="app-shell">${topbar()}<section class="page-heading"><button class="back-link" data-action="back-lobby">${icon('back',16)} Voltar às aventuras</button><div class="eyebrow">Mesa virtual · ${campaign.members.length} jogadores</div><h1>${escapeHtml(campaign.name)}</h1><p>Uma história compartilhada, uma rolagem de cada vez.</p></section><section class="chat-layout"><div class="chat-panel"><div class="chat-top"><div class="chat-campaign"><span class="brand-mark">${icon('dice',17)}</span><div><strong>${escapeHtml(campaign.name)}</strong><small><span class="live-dot"></span> Mesa ativa · Mestre ${escapeHtml(campaign.gmName)}</small></div></div><div class="chat-actions">${isGM ? '' : `<button class="icon-btn dice-button" data-action="roll-dice" aria-label="Rolar dado d20" title="Rolar dado d20">${icon('dice',21)}</button>`}${isGM ? '' : `<button class="ghost-btn small invite-inline" data-action="character">${icon('user',15)} Minha ficha</button>`}<button class="icon-btn" data-action="members" aria-label="Mostrar membros">${icon('user',17)}</button></div></div>${gmTools}<div class="chat-scroll" id="chat-scroll">${renderMessages(campaign)}</div><form class="composer" id="chat-form"><p class="command-hint">Use <b>/d20</b> ou <b>/2d6+3</b> para rolar dados · ${isGM ? '<b>!gm</b> para narrar como mestre' : 'ações entre *asteriscos* aparecem em itálico'}</p><div class="composer-row"><textarea id="chat-input" rows="1" placeholder="Escreva sua mensagem..." maxlength="1200" aria-label="Mensagem"></textarea><button class="button send-btn" type="submit" aria-label="Enviar">${icon('send',17)}</button></div></form></div><aside class="side-stack"><section class="sidebar-panel"><h3>Jogadores na mesa</h3>${campaign.members.map((id) => memberRow(campaign, id)).join('')}</section><section class="sidebar-panel"><h3>Código de convite</h3><div class="invite-code"><span>${campaign.inviteCode}</span><button data-action="copy" aria-label="Copiar código">${icon('copy',16)}</button></div><p class="invite-caption">Compartilhe este código com seus amigos para que entrem nesta campanha.</p></section></aside></section>${isGM ? `<button class="gm-tools" data-action="suggestions" aria-label="Sugestões privadas do mestre"><span class="icon-btn">${icon('bulb',19)}</span></button>` : ''}</main>`;
   const scroll = document.querySelector('#chat-scroll');
   scroll.scrollTop = scroll.scrollHeight;
   document.querySelector('#chat-input')?.addEventListener('keydown', (event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); document.querySelector('#chat-form').requestSubmit(); } });
@@ -133,6 +134,17 @@ function refreshFieldChips() {
 function showJoinModal() {
   showModal('Entrar em uma mesa', 'Insira o código de convite compartilhado pelo mestre.', `<form id="join-form"><div class="field"><label for="invite-code-input">Código de convite</label><input id="invite-code-input" name="code" maxlength="6" autocomplete="off" placeholder="Ex.: F8K2LP" style="text-transform:uppercase;letter-spacing:4px;font-weight:700" required /></div><div class="notice">O código adiciona sua conta a esta campanha e sincroniza a mesa entre os jogadores.</div><div class="form-actions"><button class="button secondary" type="button" data-action="close-modal">Cancelar</button><button class="button" type="submit">Encontrar campanha</button></div></form>`);
 }
+function showGMAction(kind) {
+  if (repo.user.id !== repo.getCampaign(ui.campaignId)?.gmId) return;
+  const configs = {
+    narrate: ['Narrar', 'Escreva a cena ou descreva o que acontece na mesa.', 'Ex.: A chuva começa a bater nas telhas enquanto uma sombra atravessa a praça.'],
+    npc: ['Criar NPC', 'Defina o nome e a descrição do personagem não jogador.', 'Ex.: Maelis, cartógrafa — fala pouco e observa cada detalhe.'],
+    event: ['Criar evento', 'Descreva um acontecimento que muda a cena ou gera uma consequência.', 'Ex.: O sino da torre soa sozinho, três vezes.']
+  };
+  const [title, subtitle, placeholder] = configs[kind];
+  showModal(title, subtitle, `<form id="gm-action-form" data-kind="${kind}"><div class="field"><label for="gm-action-text">${title}</label><textarea id="gm-action-text" name="text" maxlength="1200" placeholder="${placeholder}" required></textarea></div><div class="form-actions"><button class="button secondary" type="button" data-action="close-modal">Cancelar</button><button class="button" type="submit">${kind === 'narrate' ? 'Narrar na mesa' : kind === 'npc' ? 'Criar NPC no chat' : 'Criar evento no chat'}</button></div></form>`);
+}
+
 function showSuggestions() {
   const campaign = repo.getCampaign(ui.campaignId);
   if (!campaign || repo.user.id !== campaign.gmId) return;
@@ -165,7 +177,7 @@ async function postChat(text) {
   if (repo.user.id === campaign.gmId && text.startsWith('!gm ')) { role = 'gm'; text = text.slice(4).trim(); }
   const dice = rollDice(text);
   if (dice?.error) { toast(dice.error); return; }
-  await repo.sendMessage(campaign.id, { name: character.name, portrait: character.portrait, text: dice?.text || text, type: dice?.type || 'text', role });
+  await repo.sendMessage(campaign.id, { name: character?.name || repo.user.name, portrait: character?.portrait || repo.user.avatar, text: dice?.text || text, type: dice?.type || 'text', role });
   renderChat();
 }
 
@@ -275,7 +287,8 @@ document.addEventListener('click', async (event) => {
     const campaign = repo.getCampaign(ui.campaignId);
     if (!campaign.members.includes(repo.user.id)) { toast('Entre nesta campanha com o código de convite.'); return; }
     ui.pendingPortrait = '';
-    ui.screen = repo.getCharacter(campaign) ? 'chat' : 'sheet';
+    const isGM = campaign.gmId === repo.user.id;
+    ui.screen = isGM || repo.getCharacter(campaign) ? 'chat' : 'sheet';
     render();
   }
   if (action === 'character') { ui.pendingPortrait = ''; ui.screen = 'sheet'; render(); }
@@ -286,6 +299,9 @@ document.addEventListener('click', async (event) => {
     catch { toast(`Código: ${campaign.inviteCode}`); }
   }
   if (action === 'suggestions') showSuggestions();
+  if (action === 'gm-narrate') showGMAction('narrate');
+  if (action === 'gm-npc') showGMAction('npc');
+  if (action === 'gm-event') showGMAction('event');
   if (action === 'roll-dice') {
     const campaign = repo.getCampaign(ui.campaignId);
     if (!campaign || repo.user.id === campaign.gmId) return;
@@ -317,7 +333,7 @@ document.addEventListener('submit', async (event) => {
       const campaign = await repo.createCampaign({ name: data.name.trim(), description: data.description.trim(), cover: ui.pendingCover, fields: [...ui.fieldDraft] });
       document.querySelector('.modal-backdrop')?.remove();
       ui.campaignId = campaign.id;
-      ui.screen = 'sheet';
+      ui.screen = 'chat';
       ui.pendingPortrait = '';
       render();
       toast(`Campanha criada! Código: ${campaign.inviteCode}`);
@@ -338,6 +354,14 @@ document.addEventListener('submit', async (event) => {
       ui.screen = 'chat';
       render();
       toast('Personagem salvo. Bem-vindo à mesa!');
+    }
+    if (form.id === 'gm-action-form') {
+      const kind = form.dataset.kind;
+      const text = new FormData(form).get('text')?.trim();
+      if (!text) return;
+      const prefix = kind === 'npc' ? 'NPC: ' : kind === 'event' ? 'Evento: ' : '';
+      document.querySelector('.modal-backdrop')?.remove();
+      await postChat(`${prefix}${text}`);
     }
     if (form.id === 'chat-form') {
       const input = document.querySelector('#chat-input');
