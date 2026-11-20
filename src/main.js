@@ -4,7 +4,7 @@ import { avatar, escapeHtml, icon, toast } from './components.js';
 
 const repo = new LocalRepository();
 const app = document.querySelector('#app');
-const ui = { screen: 'lobby', campaignId: null, query: '', modal: '', pendingCover: '', pendingPortrait: '', fieldDraft: [...DEFAULT_FIELDS], pressTimer: null, pressedCard: null, suppressCardClickUntil: 0 };
+const ui = { screen: 'lobby', campaignId: null, query: '', modal: '', pendingCover: '', pendingPortrait: '', fieldDraft: [...DEFAULT_FIELDS], pressTimer: null, pressedCard: null, pressOrigin: null, ignoreNextClick: false };
 
 // Escapa textos antes de mostrá-los e reutiliza as mesmas funções de tela entre navegações.
 function render() {
@@ -156,32 +156,53 @@ function cancelCampaignPress() {
   ui.pressOrigin = null;
 }
 
-document.addEventListener('pointerdown', (event) => {
-  const card = event.target.closest('.campaign-card.long-pressable');
-  if (!card || (event.pointerType === 'mouse' && event.button !== 0)) return;
+function startCampaignPress(card, x, y) {
+  if (!card) return;
   cancelCampaignPress();
   ui.pressedCard = card;
-  ui.pressOrigin = { x: event.clientX, y: event.clientY };
+  ui.pressOrigin = { x, y };
   ui.pressTimer = window.setTimeout(() => {
     if (!card.isConnected) return cancelCampaignPress();
     const campaign = repo.getCampaign(card.dataset.id);
     if (!campaign || campaign.gmId !== repo.user?.id) return cancelCampaignPress();
     ui.pressTimer = null;
-    ui.suppressCardClickUntil = Date.now() + 1200;
+    ui.ignoreNextClick = true;
     showDeleteConfirmation(campaign.id);
   }, 650);
-}, { passive: true });
-document.addEventListener('pointermove', (event) => {
+}
+
+function moveCampaignPress(x, y) {
   if (!ui.pressTimer || !ui.pressOrigin) return;
-  if (Math.hypot(event.clientX - ui.pressOrigin.x, event.clientY - ui.pressOrigin.y) > 12) cancelCampaignPress();
+  if (Math.hypot(x - ui.pressOrigin.x, y - ui.pressOrigin.y) > 12) cancelCampaignPress();
+}
+
+document.addEventListener('pointerdown', (event) => {
+  // O próximo gesto é uma ação nova; o clique sintético do toque anterior já teria ocorrido.
+  ui.ignoreNextClick = false;
+  if (event.pointerType === 'touch') return;
+  if (event.pointerType === 'mouse' && event.button !== 0) return;
+  startCampaignPress(event.target.closest('.campaign-card.long-pressable'), event.clientX, event.clientY);
 }, { passive: true });
+document.addEventListener('pointermove', (event) => moveCampaignPress(event.clientX, event.clientY), { passive: true });
 for (const eventName of ['pointerup', 'pointercancel']) document.addEventListener(eventName, cancelCampaignPress, { passive: true });
+
+document.addEventListener('touchstart', (event) => {
+  ui.ignoreNextClick = false;
+  const touch = event.changedTouches[0];
+  if (touch) startCampaignPress(event.target.closest('.campaign-card.long-pressable'), touch.clientX, touch.clientY);
+}, { passive: true });
+document.addEventListener('touchmove', (event) => {
+  const touch = event.changedTouches[0];
+  if (touch) moveCampaignPress(touch.clientX, touch.clientY);
+}, { passive: true });
+for (const eventName of ['touchend', 'touchcancel']) document.addEventListener(eventName, cancelCampaignPress, { passive: true });
 document.addEventListener('contextmenu', (event) => {
   if (event.target.closest('.campaign-card.long-pressable')) event.preventDefault();
 });
 
 document.addEventListener('click', async (event) => {
-  if (Date.now() < ui.suppressCardClickUntil && event.target.closest('.campaign-card')) {
+  if (ui.ignoreNextClick) {
+    ui.ignoreNextClick = false;
     event.preventDefault();
     event.stopPropagation();
     return;
