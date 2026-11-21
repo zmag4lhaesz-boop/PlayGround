@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<!-- Mobile-first: no pinch zoom, no accidental browser scrolling, notch-safe -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#7fbfef" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="description" content="Reality Forge — a mobile-first 3D sandbox where anything you type becomes a physical object." />
+<title>Reality Forge — Text-to-Reality Sandbox</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%230e1b2b'/%3E%3Cpath d='M32 12l17 10v20L32 52 15 42V22z' fill='none' stroke='%23ff9a52' stroke-width='3.5'/%3E%3Cpath d='M32 12v40M15 22l34 20M49 22L15 42' stroke='%237dd3fc' stroke-width='1.4' opacity='.55'/%3E%3C/svg%3E" />
+<style>
+/* ==========================================================================
+   REALITY FORGE — UI
+   A bright, glassy mobile HUD over a soft low-poly 3D world.
+   ========================================================================== */
+:root{
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+  --ink: #0b1a29;
+  --glass: rgba(9, 22, 38, .52);
+  --glass-strong: rgba(10, 24, 40, .82);
+  --stroke: rgba(255, 255, 255, .22);
+  --stroke-soft: rgba(255, 255, 255, .12);
+  --accent: #ff7a45;
+  --accent-2: #ff4d6d;
+  --gold: #ffd166;
+  --mint: #6ee7c8;
+  --radius: 20px;
+  --font: ui-rounded, "SF Pro Rounded", "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+}
+*{ box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body{
+  margin: 0; padding: 0;
+  width: 100%; height: 100%;
+  overflow: hidden;
+  background: #7fbfef;
+  font-family: var(--font);
+  color: #fff;
+  overscroll-behavior: none;
+  touch-action: none;
+  -webkit-user-select: none; user-select: none;
+  -webkit-touch-callout: none;
+  position: fixed; inset: 0;
+}
+button, input, textarea, select{ font-family: inherit; }
+button{ -webkit-tap-highlight-color: transparent; touch-action: manipulation; cursor: pointer; }
+input, textarea{ -webkit-user-select: text; user-select: text; }
+#app{ position: fixed; inset: 0; z-index: 0; }
+#app canvas{ position: absolute; inset: 0; width: 100% !important; height: 100% !important; display: block; touch-action: none; }
+
+/* Soft cinematic edges + top scrim for HUD legibility */
+#vignette{
+  position: fixed; inset: 0; z-index: 4; pointer-events: none;
+  box-shadow: inset 0 0 140px rgba(0, 26, 54, .18), inset 0 -90px 120px -80px rgba(0, 18, 38, .35);
+}
+#topScrim{
+  position: fixed; top: 0; left: 0; right: 0; height: 150px; z-index: 6; pointer-events: none;
+  background: linear-gradient(to bottom, rgba(4, 20, 38, .34), rgba(4, 20, 38, .08) 55%, transparent);
+}
+
+/* ============================ TOP BAR ============================ */
+#topbar{
+  position: fixed; top: calc(10px + var(--sat)); left: 0; right: 0;
+  display: flex; align-items: center; gap: 9px;
+  padding: 0 calc(13px + var(--sar)) 0 calc(13px + var(--sal));
+  z-index: 30; pointer-events: none;
+}
+.brand{
+  display: flex; align-items: center; gap: 9px; min-width: 0;
+  filter: drop-shadow(0 4px 14px rgba(0, 20, 40, .25));
+}
+.brand-mark{
+  width: 36px; height: 36px; flex: 0 0 36px; border-radius: 12px;
+  display: grid; place-items: center; position: relative;
+  background: linear-gradient(145deg, rgba(255,255,255,.3), rgba(255,255,255,.06));
+  border: 1px solid rgba(255,255,255,.45);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 6px 18px rgba(0, 28, 54, .22);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+}
+.brand-mark svg{ width: 21px; height: 21px; }
+.brand-copy{ display: flex; flex-direction: column; line-height: 1; }
+.brand-name{ font-weight: 850; font-size: 13.5px; letter-spacing: .11em; text-shadow: 0 2px 10px rgba(0,20,40,.4); }
+.brand-sub{ margin-top: 4px; font-size: 8px; font-weight: 700; letter-spacing: .2em; color: rgba(255,255,255,.75); text-transform: uppercase; }
+
+#createBtn{
+  margin-left: auto; pointer-events: auto;
+  display: flex; align-items: center; gap: 7px;
+  padding: 10px 16px 10px 13px; border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.55);
+  background: linear-gradient(135deg, #ffe08a 0%, #ffab5e 38%, #ff7a63 72%, #ff5c8a 100%);
+  color: #35170a; font-weight: 850; font-size: 14.5px; letter-spacing: -.01em;
+  box-shadow: 0 8px 24px rgba(255, 92, 122, .34), inset 0 1px 0 rgba(255,255,255,.8), inset 0 -2px 6px rgba(150, 30, 0, .14);
+  transition: transform .15s ease, box-shadow .2s ease, filter .2s;
+  position: relative; overflow: hidden; white-space: nowrap;
+}
+#createBtn::after{
+  content:""; position:absolute; top:-60%; left:-30%; width: 38%; height: 220%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.6), transparent);
+  transform: rotate(18deg); animation: sheen 4.8s ease-in-out infinite;
+}
+@keyframes sheen{ 0%, 62%{ left: -40%; } 78%, 100%{ left: 130%; } }
+#createBtn:active{ transform: scale(.95); filter: brightness(1.04); }
+#createBtn .spark{ font-size: 17px; line-height: 1; text-shadow: 0 1px 0 rgba(255,255,255,.5); }
+#createBtn .kbd{ display: none; }
+.icon-btn{
+  pointer-events: auto; width: 40px; height: 40px; flex: 0 0 40px;
+  display: grid; place-items: center; border-radius: 50%;
+  border: 1px solid var(--stroke); background: var(--glass);
+  color: #fff; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 6px 18px rgba(0, 20, 40, .18), inset 0 1px 0 rgba(255,255,255,.18);
+  transition: transform .15s ease, background .2s;
+}
+.icon-btn:active{ transform: scale(.9); background: rgba(20, 40, 64, .7); }
+.icon-btn svg{ width: 19px; height: 19px; opacity: .92; }
+
+/* ============================ STATUS PILLS ============================ */
+#stats{
+  position: fixed; left: calc(14px + var(--sal)); top: calc(58px + var(--sat)); z-index: 26;
+  display: flex; align-items: center; gap: 7px; pointer-events: none;
+  padding: 6px 10px; border-radius: 999px;
+  background: rgba(8, 22, 38, .38); border: 1px solid rgba(255,255,255,.14);
+  backdrop-filter: blur(9px); -webkit-backdrop-filter: blur(9px);
+  font-size: 8.5px; font-weight: 800; letter-spacing: .13em; text-transform: uppercase;
+  color: rgba(255,255,255,.86); box-shadow: 0 4px 14px rgba(0,20,40,.14);
+}
+#stats .dot{ width: 5px; height: 5px; border-radius: 50%; background: var(--mint); box-shadow: 0 0 8px var(--mint); }
+#stats .sep{ opacity: .3; }
+#stats b{ color: #fff; font-weight: 850; letter-spacing: .08em; }
+
+#effectChip{
+  position: fixed; left: 50%; top: calc(92px + var(--sat)); transform: translateX(-50%) translateY(-8px);
+  z-index: 27; pointer-events: none; opacity: 0;
+  display: flex; align-items: center; gap: 7px; white-space: nowrap;
+  padding: 7px 13px; border-radius: 999px;
+  background: linear-gradient(135deg, rgba(38, 24, 64, .82), rgba(18, 32, 58, .82));
+  border: 1px solid rgba(180, 160, 255, .4);
+  box-shadow: 0 8px 24px rgba(40, 20, 90, .28), inset 0 1px 0 rgba(255,255,255,.16);
+  font-size: 9px; font-weight: 850; letter-spacing: .12em; text-transform: uppercase;
+  color: #e9e1ff; transition: opacity .25s ease, transform .25s ease;
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+}
+#effectChip.on{ opacity: 1; transform: translateX(-50%) translateY(0); }
+#effectChip .e-icon{ font-size: 12px; }
+#effectChip .e-time{ padding: 2px 6px; border-radius: 6px; background: rgba(255,255,255,.12); font-size: 8px; color: #fff; }
+
+/* ============================ MATERIALIZING ============================ */
+#materializing{
+  position: fixed; left: 50%; top: calc(132px + var(--sat)); transform: translateX(-50%) translateY(-6px) scale(.96);
+  z-index: 40; pointer-events: none; opacity: 0;
+  display: flex; align-items: center; gap: 9px;
+  padding: 9px 15px 9px 11px; border-radius: 999px;
+  background: rgba(12, 26, 44, .78); border: 1px solid rgba(160, 210, 255, .35);
+  box-shadow: 0 12px 34px rgba(0, 22, 46, .3), inset 0 1px 0 rgba(255,255,255,.16);
+  font-size: 11.5px; font-weight: 750; letter-spacing: .02em; color: #e8f5ff;
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  transition: opacity .22s ease, transform .22s ease;
+}
+#materializing.on{ opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+.spinner{
+  width: 17px; height: 17px; border-radius: 50%;
+  border: 2px solid rgba(255,255,255,.18); border-top-color: var(--gold);
+  animation: spin .8s linear infinite;
+}
+@keyframes spin{ to{ transform: rotate(360deg); } }
+
+/* ============================ TOASTS ============================ */
+#toasts{
+  position: fixed; left: 50%; top: calc(176px + var(--sat)); transform: translateX(-50%);
+  z-index: 45; display: flex; flex-direction: column; align-items: center; gap: 7px;
+  width: min(92vw, 400px); pointer-events: none;
+}
+.toast{
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 13px; border-radius: 999px;
+  background: rgba(9, 23, 40, .82); border: 1px solid rgba(255,255,255,.16);
+  box-shadow: 0 8px 22px rgba(0,20,40,.26); backdrop-filter: blur(10px);
+  font-size: 11.5px; font-weight: 650; color: #f2f8ff; text-align: center;
+  animation: toastIn .28s cubic-bezier(.2,.9,.3,1.2) both;
+  max-width: 100%;
+}
+.toast.out{ animation: toastOut .3s ease forwards; }
+.toast .t-icon{ font-size: 13px; flex: 0 0 auto; }
+.toast.warn{ border-color: rgba(255, 190, 90, .4); background: rgba(54, 32, 10, .82); }
+.toast.good{ border-color: rgba(110, 231, 200, .35); }
+@keyframes toastIn{ from{ opacity: 0; transform: translateY(-8px) scale(.96); } }
+@keyframes toastOut{ to{ opacity: 0; transform: translateY(-6px) scale(.97); } }
+
+/* ============================ COACH HINT ============================ */
+#hint{
+  position: fixed; left: 50%; top: calc(134px + var(--sat)); transform: translateX(-50%);
+  z-index: 25; pointer-events: none;
+  padding: 8px 14px; border-radius: 999px;
+  background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.28);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  font-size: 10.5px; font-weight: 650; letter-spacing: .01em; color: #fff;
+  text-shadow: 0 1px 6px rgba(0, 20, 40, .3);
+  box-shadow: 0 8px 22px rgba(0,20,40,.12);
+  animation: hintFloat 3.2s ease-in-out infinite;
+  transition: opacity .6s ease, transform .6s ease;
+  white-space: nowrap;
+}
+#hint.off{ opacity: 0; transform: translateX(-50%) translateY(-8px); }
+@keyframes hintFloat{ 0%,100%{ transform: translateX(-50%) translateY(0); } 50%{ transform: translateX(-50%) translateY(-3px); } }
+
+/* ============================ RETICLE ============================ */
+#reticle{
+  position: fixed; left: 50%; top: 50%; width: 24px; height: 24px;
+  transform: translate(-50%, -50%); z-index: 18; pointer-events: none;
+  opacity: 0; transition: opacity .25s ease;
+}
+#reticle.on{ opacity: .8; }
+#reticle::before, #reticle::after{
+  content:""; position: absolute; left: 50%; top: 50%; background: rgba(255,255,255,.9);
+  box-shadow: 0 0 6px rgba(0, 20, 40, .45);
+}
+#reticle::before{ width: 2px; height: 2px; border-radius: 50%; transform: translate(-50%,-50%); }
+#reticle::after{
+  width: 22px; height: 22px; background: transparent; transform: translate(-50%,-50%);
+  border: 1px solid rgba(255,255,255,.65); border-radius: 50%;
+  box-shadow: 0 0 8px rgba(0,20,40,.25), inset 0 0 6px rgba(255,255,255,.12);
+}
+#reticle.pulse::after{ animation: reticlePulse .22s ease-out; }
+@keyframes reticlePulse{ 50%{ transform: translate(-50%,-50%) scale(1.35); border-color: #fff; } }
+
+/* ============================ JOYSTICK ============================ */
+#joystickZone{
+  position: fixed; left: 0; bottom: 0; width: 48%; height: 58%;
+  z-index: 12; touch-action: none;
+}
+#joystick{
+  position: fixed; width: 124px; height: 124px; border-radius: 50%;
+  transform: translate(-50%, -50%); pointer-events: none; z-index: 13;
+  background: radial-gradient(circle at 36% 30%, rgba(255,255,255,.24), rgba(9, 24, 42, .18) 70%);
+  border: 1.5px solid rgba(255,255,255,.34);
+  box-shadow: 0 12px 34px rgba(0, 20, 40, .16), inset 0 0 34px rgba(255,255,255,.07);
+  backdrop-filter: blur(7px); -webkit-backdrop-filter: blur(7px);
+  opacity: .72; transition: opacity .2s ease, width .15s ease, height .15s ease;
+  will-change: left, top;
+}
+#joystick.active{ opacity: 1; }
+#joystick .stick-ring{
+  position: absolute; inset: 17px; border-radius: 50%;
+  border: 1px dashed rgba(255,255,255,.22);
+}
+#stickKnob{
+  position: absolute; left: 50%; top: 50%; width: 56px; height: 56px; border-radius: 50%;
+  transform: translate(-50%, -50%); will-change: transform;
+  background: radial-gradient(circle at 35% 30%, rgba(255,255,255,.92), rgba(210, 235, 255, .58) 60%, rgba(160, 200, 235, .4));
+  border: 1px solid rgba(255,255,255,.75);
+  box-shadow: 0 6px 16px rgba(0, 24, 50, .26), inset 0 1px 2px rgba(255,255,255,.9);
+}
+#joystick .stick-label{
+  position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%);
+  font-size: 6.5px; font-weight: 850; letter-spacing: .22em; color: rgba(12,32,52,.6);
+  text-shadow: 0 1px 0 rgba(255,255,255,.35);
+}
+#joystick .stick-tick{
+  position: absolute; width: 5px; height: 5px; border-radius: 50%;
+  background: rgba(255,255,255,.5); top: 50%; left: 50%; transform: translate(-50%,-50%);
+}
+#joystick .stick-tick.t{ top: 13px; } #joystick .stick-tick.b{ top: auto; bottom: 13px; }
+#joystick .stick-tick.l{ left: 13px; } #joystick .stick-tick.r{ left: auto; right: 13px; }
+
+/* ============================ LOOK AREA ============================ */
+#lookZone{
+  position: fixed; inset: 0; z-index: 8; touch-action: none;
+  cursor: grab;
+}
+#lookZone:active{ cursor: grabbing; }
+
+/* ============================ ACTION BUTTONS ============================ */
+#actions{
+  position: fixed; right: calc(18px + var(--sar)); bottom: calc(22px + var(--sab));
+  z-index: 22; display: flex; flex-direction: column; align-items: flex-end; gap: 14px;
+  pointer-events: none;
+}
+.action{
+  pointer-events: auto; position: relative; border: none; color: #fff;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  border-radius: 50%; user-select: none; transition: transform .1s ease, filter .15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.action:active{ transform: scale(.92); filter: brightness(1.08); }
+.action svg{ width: 28px; height: 28px; filter: drop-shadow(0 2px 4px rgba(0,20,40,.25)); }
+.action .lbl{ font-size: 7.5px; font-weight: 850; letter-spacing: .16em; opacity: .88; }
+#jumpBtn{
+  width: 66px; height: 66px; margin-right: 15px;
+  background: linear-gradient(150deg, rgba(255,255,255,.28), rgba(16, 34, 54, .42));
+  border: 1.5px solid rgba(255,255,255,.42);
+  box-shadow: 0 8px 22px rgba(0, 20, 40, .22), inset 0 1px 0 rgba(255,255,255,.4);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+}
+#jumpBtn svg{ width: 24px; height: 24px; }
+#useBtn{
+  width: 92px; height: 92px;
+  background:
+    radial-gradient(circle at 32% 24%, rgba(255,255,255,.42), transparent 42%),
+    linear-gradient(145deg, #ff9a52 0%, #ff6a56 45%, #ff3f78 100%);
+  border: 2px solid rgba(255,255,255,.5);
+  box-shadow: 0 14px 34px rgba(255, 70, 110, .38), inset 0 1px 0 rgba(255,255,255,.6), inset 0 -5px 14px rgba(140, 20, 50, .2);
+}
+#useBtn svg{ width: 34px; height: 34px; }
+#useBtn .lbl{ font-size: 8.5px; letter-spacing: .18em; color: #fff; text-shadow: 0 1px 4px rgba(100,0,20,.3); }
+#useBtn::before{
+  content:""; position: absolute; inset: -6px; border-radius: 50%; pointer-events: none;
+  background: conic-gradient(rgba(255,255,255,.85) calc(var(--cd, 0) * 1turn), rgba(255,255,255,.13) 0);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px));
+  opacity: .85;
+}
+#useBtn.ready::before{ opacity: 0; transition: opacity .2s .1s; }
+#useBtn .badge{
+  position: absolute; top: -2px; right: -2px; min-width: 19px; height: 19px; padding: 0 5px;
+  border-radius: 999px; background: rgba(9, 23, 40, .85); border: 1px solid rgba(255,255,255,.35);
+  font-size: 8px; font-weight: 850; display: none; align-items: center; justify-content: center;
+}
+
+/* ============================ ITEM CARD ============================ */
+#itemCard{
+  position: fixed; left: 50%; bottom: calc(196px + var(--sab)); transform: translateX(-50%) translateY(8px);
+  z-index: 21; pointer-events: none; opacity: 0;
+  display: flex; align-items: center; gap: 9px;
+  padding: 7px 12px 7px 7px; border-radius: 15px;
+  background: rgba(9, 23, 40, .62); border: 1px solid rgba(255,255,255,.18);
+  box-shadow: 0 10px 26px rgba(0,20,40,.22), inset 0 1px 0 rgba(255,255,255,.14);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  transition: opacity .25s ease, transform .25s ease; max-width: 78vw;
+}
+#itemCard.on{ opacity: 1; transform: translateX(-50%) translateY(0); }
+#itemCard .item-ico{
+  width: 32px; height: 32px; flex: 0 0 32px; border-radius: 10px;
+  display: grid; place-items: center; font-size: 16px;
+  background: linear-gradient(145deg, rgba(255, 209, 102, .3), rgba(255, 92, 122, .3));
+  border: 1px solid rgba(255,255,255,.2);
+}
+#itemCard .item-copy{ min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+#itemCard .item-name{ font-size: 11.5px; font-weight: 800; letter-spacing: .01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#itemCard .item-action{ font-size: 7.5px; font-weight: 850; letter-spacing: .16em; color: var(--gold); text-transform: uppercase; }
+#itemCard .item-type{ display: none; }
+
+#vehicleHint{
+  position: fixed; left: 50%; bottom: calc(270px + var(--sab)); transform: translateX(-50%);
+  z-index: 21; pointer-events: none; opacity: 0;
+  padding: 7px 12px; border-radius: 999px; background: rgba(9,23,40,.72);
+  border: 1px solid rgba(110,231,200,.4); font-size: 10px; font-weight: 750;
+  color: #d8fff5; transition: opacity .2s; box-shadow: 0 8px 20px rgba(0,20,40,.2);
+}
+#vehicleHint.on{ opacity: 1; }
+
+/* ============================ OVERLAYS / SHEETS ============================ */
+.overlay{
+  position: fixed; inset: 0; z-index: 60;
+  display: flex; align-items: flex-end; justify-content: center;
+  background: rgba(5, 14, 26, .42);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  opacity: 0; pointer-events: none; transition: opacity .25s ease;
+}
+.overlay.open{ opacity: 1; pointer-events: auto; }
+.sheet{
+  width: min(600px, 100%); max-height: calc(100% - 16px - var(--sat));
+  background: linear-gradient(180deg, rgba(20, 35, 53, .96), rgba(9, 18, 30, .98));
+  border: 1px solid rgba(255,255,255,.14);
+  border-bottom: none;
+  border-radius: 28px 28px 0 0;
+  padding: 18px 17px calc(17px + var(--sab));
+  box-shadow: 0 -24px 70px rgba(0, 8, 20, .5), inset 0 1px 0 rgba(255,255,255,.08);
+  transform: translateY(36px); transition: transform .32s cubic-bezier(.2, .85, .25, 1);
+  overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y;
+}
+.overlay.open .sheet{ transform: translateY(0); }
+.sheet::before{
+  content:""; display: block; width: 38px; height: 4px; border-radius: 999px;
+  background: rgba(255,255,255,.22); margin: -7px auto 13px;
+}
+.sheet-head{ display: flex; align-items: flex-start; gap: 10px; margin-bottom: 13px; }
+.sheet-head .head-copy{ flex: 1; min-width: 0; }
+.eyebrow{ font-size: 8px; font-weight: 850; letter-spacing: .22em; color: var(--gold); text-transform: uppercase; }
+.sheet h2{ margin: 4px 0 3px; font-size: 24px; line-height: 1.05; letter-spacing: -.025em; font-weight: 850; }
+.sheet .sub{ margin: 0; font-size: 11.5px; line-height: 1.45; color: rgba(232, 244, 255, .62); }
+.close-btn{
+  width: 34px; height: 34px; flex: 0 0 34px; border-radius: 50%;
+  border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.07);
+  color: rgba(255,255,255,.8); display: grid; place-items: center;
+}
+.close-btn svg{ width: 15px; height: 15px; }
+.close-btn:active{ background: rgba(255,255,255,.16); transform: scale(.94); }
+
+.chips{
+  display: flex; flex-wrap: wrap; gap: 7px; padding: 2px 1px 11px;
+  margin: 0 -2px;
+}
+.chips::-webkit-scrollbar{ display: none; }
+.chip{
+  flex: 0 1 auto; display: flex; align-items: center; gap: 5px;
+  padding: 7px 10px; border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.065);
+  color: rgba(240, 248, 255, .88); font-size: 11.5px; font-weight: 650;
+  transition: background .15s, border-color .15s, transform .1s;
+}
+.chip:active{ transform: scale(.96); background: rgba(255, 209, 102, .16); border-color: rgba(255,209,102,.4); }
+.chip .c-ico{ font-size: 12px; }
+
+.inputRow{
+  display: flex; align-items: flex-end; gap: 8px;
+  padding: 7px; border-radius: 22px;
+  background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.15);
+  box-shadow: inset 0 2px 8px rgba(0,0,0,.18);
+}
+#promptInput{
+  flex: 1; min-width: 0; min-height: 48px; max-height: 128px; resize: none;
+  padding: 12px 4px 10px; border: none; outline: none; background: transparent;
+  color: #fff; font-size: 16px; line-height: 1.35; letter-spacing: -.005em;
+  touch-action: manipulation; overflow-y: auto;
+}
+#promptInput::placeholder{ color: rgba(220, 236, 255, .38); }
+#promptInput:focus{ outline: none; }
+.round-btn{
+  flex: 0 0 auto; width: 46px; height: 46px; border-radius: 50%;
+  display: grid; place-items: center; border: 1px solid rgba(255,255,255,.14);
+  background: rgba(255,255,255,.08); color: #fff; transition: transform .12s, background .15s;
+}
+.round-btn svg{ width: 20px; height: 20px; }
+.round-btn:active{ transform: scale(.92); }
+#micBtn.listening{
+  background: rgba(255, 77, 109, .22); border-color: rgba(255, 120, 140, .55);
+  animation: micPulse 1.2s ease-in-out infinite;
+}
+@keyframes micPulse{ 50%{ box-shadow: 0 0 0 7px rgba(255, 77, 109, .1); } }
+#sendBtn{
+  width: 52px; height: 52px; border-radius: 17px; border: 1px solid rgba(255,255,255,.45);
+  background: linear-gradient(145deg, #ffd166, #ff8a4c 55%, #ff5c7a);
+  color: #2c1508; box-shadow: 0 8px 20px rgba(255, 100, 90, .3), inset 0 1px 0 rgba(255,255,255,.6);
+  display: grid; place-items: center; transition: transform .12s, filter .15s;
+}
+#sendBtn:active{ transform: scale(.94); }
+#sendBtn svg{ width: 22px; height: 22px; }
+#sendBtn:disabled{ filter: grayscale(.7) brightness(.7); }
+.footnote{
+  display: flex; align-items: center; gap: 6px; margin: 11px 2px 0;
+  font-size: 9px; line-height: 1.4; color: rgba(220, 236, 255, .42); font-weight: 550;
+}
+.footnote .dot{ width: 4px; height: 4px; border-radius: 50%; background: var(--mint); flex: 0 0 4px; }
+#voiceStatus{
+  margin: 8px 2px 0; font-size: 10px; color: var(--gold); display: none; font-weight: 650;
+}
+#voiceStatus.on{ display: block; animation: blink 1.2s ease-in-out infinite; }
+@keyframes blink{ 50%{ opacity: .45; } }
+
+/* ============================ SETTINGS ============================ */
+#settingsOverlay{ align-items: center; padding: calc(14px + var(--sat)) 12px calc(14px + var(--sab)); }
+#settingsOverlay .sheet{
+  border-radius: 26px; border-bottom: 1px solid rgba(255,255,255,.14);
+  max-height: min(86dvh, 760px); padding: 18px 17px 17px;
+}
+#settingsOverlay .sheet::before{ display: none; }
+.field{ margin-bottom: 13px; }
+.field > label{
+  display: block; margin-bottom: 6px; font-size: 8.5px; font-weight: 850;
+  letter-spacing: .16em; text-transform: uppercase; color: rgba(220, 236, 255, .5);
+}
+.seg{ display: flex; gap: 4px; padding: 4px; border-radius: 13px; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1); }
+.seg button{
+  flex: 1; padding: 9px 8px; border-radius: 10px; border: none; background: transparent;
+  color: rgba(230, 242, 255, .6); font-size: 11.5px; font-weight: 750; transition: background .15s, color .15s;
+}
+.seg button.on{ background: rgba(255, 255, 255, .13); color: #fff; box-shadow: inset 0 1px 0 rgba(255,255,255,.18); }
+.keyRow{ display: flex; gap: 7px; }
+.keyRow input{ flex: 1; min-width: 0; }
+.settings-input, .settings-select{
+  width: 100%; padding: 11px 12px; border-radius: 12px;
+  border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.06);
+  color: #fff; font-size: 16px; outline: none;
+}
+.settings-input:focus, .settings-select:focus{ border-color: rgba(255, 190, 100, .6); background: rgba(255,255,255,.09); }
+.settings-select{ appearance: none; -webkit-appearance: none; font-size: 13px; }
+.settings-select option{ background: #142132; color: #fff; }
+.eye-btn{
+  flex: 0 0 auto; padding: 0 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,.14);
+  background: rgba(255,255,255,.06); color: rgba(255,255,255,.65); font-size: 10px; font-weight: 750;
+}
+.help{ margin: 6px 1px 0; font-size: 9.5px; line-height: 1.45; color: rgba(210, 230, 250, .4); }
+.help a{ color: rgba(255, 209, 102, .8); text-decoration: none; }
+.field-row{ display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.field-row > label{ margin: 0; }
+.switch{
+  width: 46px; height: 27px; border-radius: 999px; border: 1px solid rgba(255,255,255,.18);
+  background: rgba(255,255,255,.1); position: relative; transition: background .2s;
+}
+.switch::after{
+  content:""; position: absolute; top: 3px; left: 3px; width: 19px; height: 19px; border-radius: 50%;
+  background: rgba(255,255,255,.75); transition: transform .2s, background .2s;
+  box-shadow: 0 2px 5px rgba(0,0,0,.2);
+}
+.switch.on{ background: rgba(110, 231, 200, .34); border-color: rgba(110,231,200,.45); }
+.switch.on::after{ transform: translateX(19px); background: #d9fff7; }
+.settings-actions{ display: flex; flex-direction: column; gap: 7px; margin-top: 4px; }
+.primary-btn{
+  width: 100%; padding: 13px; border-radius: 14px; border: 1px solid rgba(255,255,255,.45);
+  background: linear-gradient(145deg, #ffd166, #ff8a4c 55%, #ff5c7a);
+  color: #2c1508; font-size: 13px; font-weight: 850; letter-spacing: .01em;
+  box-shadow: 0 8px 22px rgba(255, 100, 90, .24), inset 0 1px 0 rgba(255,255,255,.55);
+}
+.primary-btn:active{ transform: scale(.985); filter: brightness(1.03); }
+.ghost-btn{
+  width: 100%; padding: 11px; border-radius: 13px;
+  border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.055);
+  color: rgba(235, 246, 255, .76); font-size: 11.5px; font-weight: 700;
+}
+.ghost-btn:active{ background: rgba(255,255,255,.12); }
+.ghost-btn.danger{ color: rgba(255, 160, 170, .9); border-color: rgba(255, 100, 120, .2); }
+.tiny{ margin: 11px 2px 0; font-size: 9px; line-height: 1.5; color: rgba(210, 230, 250, .35); text-align: center; }
+
+/* ============================ LOADING ============================ */
+#loading{
+  position: fixed; inset: 0; z-index: 100;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 15px;
+  background:
+    radial-gradient(circle at 50% 32%, rgba(255,255,255,.7), transparent 44%),
+    linear-gradient(170deg, #a9d8ff 0%, #7fbfef 48%, #5b9bd9 100%);
+  transition: opacity .7s ease, visibility .7s;
+}
+#loading.done{ opacity: 0; visibility: hidden; pointer-events: none; }
+.load-cube{
+  width: 66px; height: 66px; position: relative; transform-style: preserve-3d;
+  animation: cubeSpin 3.4s ease-in-out infinite;
+}
+.load-cube .face{
+  position: absolute; inset: 0; border-radius: 15px;
+  background: linear-gradient(145deg, #ffd166, #ff8a4c 50%, #ff5c7a);
+  border: 2px solid rgba(255,255,255,.65);
+  box-shadow: 0 18px 40px rgba(160, 40, 40, .25), inset 0 2px 0 rgba(255,255,255,.6);
+}
+.load-cube .face:nth-child(2){ transform: rotate(90deg) scale(.92); opacity: .5; }
+@keyframes cubeSpin{ 0%,100%{ transform: rotate(-8deg) rotateY(0) scale(1); } 50%{ transform: rotate(8deg) rotateY(180deg) scale(1.05); } }
+.load-title{ font-size: 20px; font-weight: 850; letter-spacing: .16em; color: #fff; text-shadow: 0 3px 14px rgba(0,40,80,.24); }
+.load-sub{ font-size: 9px; font-weight: 800; letter-spacing: .24em; text-transform: uppercase; color: rgba(255,255,255,.7); }
+.load-bar{ width: 128px; height: 3px; border-radius: 999px; background: rgba(255,255,255,.24); overflow: hidden; }
+.load-bar i{ display: block; height: 100%; width: 40%; border-radius: 999px; background: #fff; animation: loadSlide 1.4s ease-in-out infinite; }
+@keyframes loadSlide{ 0%{ transform: translateX(-110%); } 100%{ transform: translateX(360%); } }
+.load-error{ max-width: 320px; text-align: center; font-size: 12px; line-height: 1.5; color: #fff; padding: 0 20px; display: none; }
+.load-error.on{ display: block; }
+
+/* ============================ RESPONSIVE ============================ */
+@media (max-width: 430px){
+  .brand-name{ font-size: 12px; letter-spacing: .09em; }
+  .brand-sub{ display: none; }
+  .brand-mark{ width: 33px; height: 33px; flex-basis: 33px; border-radius: 11px; }
+  #createBtn{ font-size: 13.5px; padding: 9px 14px 9px 12px; gap: 6px; }
+  #stats{ font-size: 7.5px; padding: 5px 9px; gap: 5px; }
+  .sheet{ padding-left: 15px; padding-right: 15px; }
+  .sheet h2{ font-size: 22px; }
+  #itemCard{ bottom: calc(188px + var(--sab)); }
+}
+@media (max-width: 360px){
+  .brand-copy{ display: none; }
+  #createBtn{ font-size: 13px; }
+  #stats{ display: none; }
+  #hint{ font-size: 9.5px; }
+}
+@media (max-height: 500px) and (orientation: landscape){
+  #joystick{ width: 104px; height: 104px; }
+  #stickKnob{ width: 48px; height: 48px; }
+  #useBtn{ width: 78px; height: 78px; }
+  #jumpBtn{ width: 58px; height: 58px; }
+  #itemCard{ bottom: calc(150px + var(--sab)); }
+  #hint{ display: none; }
+  .sheet{ max-height: 100%; }
+  .sheet h2{ font-size: 20px; }
+}
+@media (hover: hover) and (pointer: fine){
+  #createBtn:hover{ transform: translateY(-1px); box-shadow: 0 12px 30px rgba(255, 92, 122, .42), inset 0 1px 0 rgba(255,255,255,.8); }
+  .icon-btn:hover{ background: rgba(20, 40, 64, .72); }
+  .chip:hover{ background: rgba(255,255,255,.11); }
+  #createBtn .kbd{
+    display: inline-block; margin-left: 2px; padding: 2px 5px; border-radius: 5px;
+    background: rgba(60, 25, 0, .14); font-size: 8px; font-weight: 800; letter-spacing: .05em;
+  }
+  #itemCard{ bottom: 26px; }
+  #vehicleHint{ bottom: 96px; }
+  #hint{ top: calc(130px + var(--sat)); }
+}
+</style>
+</head>
+<body>
+
+<div id="app" aria-label="3D game world"></div>
+<div id="vignette"></div>
+<div id="topScrim"></div>
+
+<!-- ============================ HUD ============================ -->
+<div id="hud">
+  <header id="topbar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none">
+          <path d="M12 2.6 20.2 7v10L12 21.4 3.8 17V7L12 2.6Z" stroke="white" stroke-width="1.6" stroke-linejoin="round"/>
+          <path d="M3.8 7 12 11.6 20.2 7M12 11.6v9.8" stroke="white" stroke-width="1.6" stroke-linejoin="round" opacity=".75"/>
+        </svg>
+      </div>
+      <div class="brand-copy">
+        <span class="brand-name">REALITY FORGE</span>
+        <span class="brand-sub">Text → Reality</span>
+      </div>
+    </div>
+    <button id="createBtn" aria-label="Create something with text">
+      <span class="spark">✦</span><span>Create</span><span class="kbd">C</span>
+    </button>
+    <button id="settingsBtn" class="icon-btn" aria-label="Settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3.1"/>
+        <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.1-1.56 1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.65 8.9a1.7 1.7 0 0 0-.34-1.88l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1.03-1.56V3a2 2 0 1 1 4 0v.09A1.7 1.7 0 0 0 15.1 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9v.09A1.7 1.7 0 0 0 20.96 10H21a2 2 0 1 1 0 4h-.09A1.7 1.7 0 0 0 19.4 15Z"/>
+      </svg>
+    </button>
+  </header>
+
+  <div id="stats" aria-hidden="true">
+    <span class="dot"></span><span>BODIES <b id="bodyCount">0</b>/40</span>
+    <span class="sep">·</span><span><b id="fpsCount">60</b> FPS</span>
+  </div>
+
+  <div id="effectChip"><span class="e-icon">🌙</span><span id="effectName">LOW GRAVITY</span><span class="e-time" id="effectTime">20s</span></div>
+  <div id="materializing"><span class="spinner"></span><span>Materializing…</span></div>
+  <div id="toasts" role="status" aria-live="polite"></div>
+  <div id="hint">Tap <b>✦ Create</b> and type anything</div>
+  <div id="reticle"></div>
+
+  <!-- Touch movement -->
+  <div id="joystickZone" aria-label="Movement joystick area">
+    <div id="joystick">
+      <div class="stick-ring"></div>
+      <span class="stick-tick t"></span><span class="stick-tick b"></span>
+      <span class="stick-tick l"></span><span class="stick-tick r"></span>
+      <div id="stickKnob"></div>
+      <span class="stick-label">MOVE</span>
+    </div>
+  </div>
+
+  <!-- Camera look / drag area -->
+  <div id="lookZone" aria-label="Look around area"></div>
+
+  <div id="itemCard">
+    <div class="item-ico" id="itemIcon">✦</div>
+    <div class="item-copy">
+      <span class="item-name" id="itemName">Nothing equipped</span>
+      <span class="item-action" id="itemAction">TAP USE</span>
+    </div>
+  </div>
+  <div id="vehicleHint">Tap <b>USE</b> to drive · joystick steers</div>
+
+  <div id="actions">
+    <button id="jumpBtn" class="action" aria-label="Jump">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 19V5M6 11l6-6 6 6"/>
+      </svg>
+      <span class="lbl">JUMP</span>
+    </button>
+    <button id="useBtn" class="action ready" aria-label="Use or fire equipped item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M13.5 3.5 20.5 10.5M17 7l-6.4 6.4a2 2 0 0 1-1.1.56l-3.1.44a1 1 0 0 1-1.13-1.13l.44-3.1a2 2 0 0 1 .56-1.1L12.7 2.7a1.1 1.1 0 0 1 1.56 0l1.74 1.74"/>
+        <path d="m8.8 12.4-3.3 3.3M3.4 20.6l2.2-5.1M11.6 15.2l3.2-3.2"/>
+      </svg>
+      <span class="lbl" id="useLabel">USE</span>
+      <span class="badge" id="useBadge">1</span>
+    </button>
+  </div>
+</div>
+
+<!-- ============================ CREATE SHEET ============================ -->
+<div id="promptOverlay" class="overlay" aria-hidden="true">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="createTitle">
+    <div class="sheet-head">
+      <div class="head-copy">
+        <div class="eyebrow">Text → Reality</div>
+        <h2 id="createTitle">Create anything</h2>
+        <p class="sub">Describe a weapon, ride, object or world event. The forge builds it from primitives.</p>
+      </div>
+      <button class="close-btn" id="closePrompt" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="m6 6 12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+
+    <div class="chips" id="chips">
+      <button class="chip" data-prompt="Airplane gun"><span class="c-ico">✈️</span>Airplane gun</button>
+      <button class="chip" data-prompt="Bouncy trampoline"><span class="c-ico">🛖</span>Bouncy trampoline</button>
+      <button class="chip" data-prompt="Explosive rain"><span class="c-ico">🌧️</span>Explosive rain</button>
+      <button class="chip" data-prompt="Giant car with square wheels"><span class="c-ico">🚙</span>Giant car</button>
+      <button class="chip" data-prompt="Low gravity"><span class="c-ico">🌙</span>Low gravity</button>
+      <button class="chip" data-prompt="Giant tower"><span class="c-ico">🏙️</span>Giant tower</button>
+    </div>
+
+    <div class="inputRow">
+      <button class="round-btn" id="micBtn" aria-label="Speak your creation">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="9" y="2.5" width="6" height="11.5" rx="3"/>
+          <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3.5M8.5 21.5h7"/>
+        </svg>
+      </button>
+      <textarea id="promptInput" rows="2" maxlength="220" enterkeyhint="go" autocomplete="off" spellcheck="false"
+        placeholder="a gun that shoots airplanes…"></textarea>
+      <button id="sendBtn" aria-label="Forge it">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h15M13 6l6 6-6 6"/></svg>
+      </button>
+    </div>
+    <div id="voiceStatus">🎙 Listening… speak your creation</div>
+    <div class="footnote"><span class="dot"></span><span id="engineNote">Local forge ready — add a key in settings for unlimited creations</span></div>
+  </div>
+</div>
+
+<!-- ============================ SETTINGS SHEET ============================ -->
+<div id="settingsOverlay" class="overlay" aria-hidden="true">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+    <div class="sheet-head">
+      <div class="head-copy">
+        <div class="eyebrow">Forge console</div>
+        <h2 id="settingsTitle">Settings</h2>
+        <p class="sub">Connect an LLM, tune performance, or manage the world.</p>
+      </div>
+      <button class="close-btn" id="closeSettings" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="m6 6 12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+
+    <div class="field">
+      <label>AI provider</label>
+      <div class="seg" id="providerSeg">
+        <button data-provider="gemini" class="on">Gemini</button>
+        <button data-provider="openai">OpenAI</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="keyInput">API key</label>
+      <div class="keyRow">
+        <input id="keyInput" class="settings-input" type="password" placeholder="Paste your key (optional)" autocomplete="off" spellcheck="false" />
+        <button class="eye-btn" id="eyeBtn" aria-label="Show API key">SHOW</button>
+      </div>
+      <p class="help">Stored only on this device (localStorage). With no key, the <b>local forge</b> handles common prompts instantly. <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Get a Gemini key ↗</a></p>
+    </div>
+
+    <div class="field">
+      <label for="modelInput">Model</label>
+      <input id="modelInput" class="settings-input" type="text" placeholder="gemini-2.5-flash" autocomplete="off" spellcheck="false" />
+    </div>
+
+    <div class="field field-row">
+      <label for="soundToggle">Sound effects</label>
+      <button id="soundToggle" class="switch on" role="switch" aria-checked="true" aria-label="Toggle sound"></button>
+    </div>
+
+    <div class="field">
+      <label for="qualitySelect">Graphics quality</label>
+      <select id="qualitySelect" class="settings-select">
+        <option value="auto">Auto (recommended)</option>
+        <option value="high">High — shadows on</option>
+        <option value="low">Battery saver — no shadows</option>
+      </select>
+    </div>
+
+    <div class="settings-actions">
+      <button class="primary-btn" id="saveSettings">Save &amp; close</button>
+      <button class="ghost-btn" id="respawnBtn">↺ Respawn at center</button>
+      <button class="ghost-btn danger" id="clearWorldBtn">Clear all creations</button>
+    </div>
+    <p class="tiny">Reality Forge · Three.js + cannon-es<br/>40-body mobile guardrail · object pooling enabled</p>
+  </div>
+</div>
+
+<!-- ============================ LOADING ============================ -->
+<div id="loading">
+  <div class="load-cube"><div class="face"></div><div class="face"></div></div>
+  <div class="load-title">REALITY FORGE</div>
+  <div class="load-sub">Compiling the world</div>
+  <div class="load-bar"><i></i></div>
+  <div class="load-error" id="loadError"></div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "cannon-es": "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js"
+  }
+}
+</script>
+
+<script>
+// If the CDN modules fail (offline / blocked), surface a readable message
+// instead of leaving the loading overlay spinning forever.
+(function () {
+  var timer = setTimeout(function () {
+    if (window.__READY__) return;
+    var box = document.getElementById("loadError");
+    var sub = document.querySelector("#loading .load-sub");
+    if (sub) sub.textContent = "CONNECTION SLOW";
+    if (box) {
+      box.classList.add("on");
+      box.textContent = "Still loading the 3D engine… Three.js and cannon-es come from a CDN. Check your connection and reload.";
+    }
+  }, 12000);
+  window.addEventListener("error", function (e) {
+    if (window.__READY__ || !e || !e.target || e.target.tagName !== "SCRIPT") return;
+    clearTimeout(timer);
+    var box = document.getElementById("loadError");
+    var sub = document.querySelector("#loading .load-sub");
+    if (sub) sub.textContent = "ENGINE OFFLINE";
+    if (box) {
+      box.classList.add("on");
+      box.textContent = "Could not load the 3D engine from the CDN. Reconnect and reload the page.";
+    }
+  }, true);
+})();
+</script>
+
+<script type="module">
+// GAME_CODE
+</script>
+</body>
+</html>
